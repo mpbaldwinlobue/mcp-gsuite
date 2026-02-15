@@ -1,10 +1,11 @@
 import logging
 from oauth2client.client import (
-    flow_from_clientsecrets,
     FlowExchangeError,
     OAuth2Credentials,
+    OAuth2WebServerFlow,
     Credentials,
 )
+from oauth2client import clientsecrets
 from googleapiclient.discovery import build
 import httplib2
 from google.auth.transport.requests import Request
@@ -35,6 +36,27 @@ SCOPES = [
     "https://mail.google.com/",
     "https://www.googleapis.com/auth/calendar"
 ]
+
+
+def _create_oauth_flow(redirect_uri=None):
+    """Create an OAuth2 flow from the gauth file, with env var overrides.
+
+    If GOOGLE_CLIENT_SECRET is set, it overrides client_secret from the file.
+    If GOOGLE_CLIENT_ID is set, it overrides client_id from the file.
+    """
+    client_type, client_info = clientsecrets.loadfile(CLIENTSECRETS_LOCATION)
+
+    client_id = os.environ.get("GOOGLE_CLIENT_ID") or client_info['client_id']
+    client_secret = os.environ.get("GOOGLE_CLIENT_SECRET") or client_info['client_secret']
+
+    return OAuth2WebServerFlow(
+        client_id=client_id,
+        client_secret=client_secret,
+        scope=' '.join(SCOPES),
+        redirect_uri=redirect_uri,
+        auth_uri=client_info['auth_uri'],
+        token_uri=client_info['token_uri'],
+    )
 
 
 class AccountInfo(pydantic.BaseModel):
@@ -157,7 +179,7 @@ def exchange_code(authorization_code):
     Raises:
     CodeExchangeException: an error occurred.
     """
-    flow = flow_from_clientsecrets(CLIENTSECRETS_LOCATION, ' '.join(SCOPES))
+    flow = _create_oauth_flow()
     flow.redirect_uri = REDIRECT_URI
     try:
         credentials = flow.step2_exchange(authorization_code)
@@ -199,7 +221,7 @@ def get_authorization_url(email_address, state):
     Returns:
     Authorization URL to redirect the user to.
     """
-    flow = flow_from_clientsecrets(CLIENTSECRETS_LOCATION, ' '.join(SCOPES), redirect_uri=REDIRECT_URI)
+    flow = _create_oauth_flow(redirect_uri=REDIRECT_URI)
     flow.params['access_type'] = 'offline'
     flow.params['approval_prompt'] = 'force'
     flow.params['user_id'] = email_address
